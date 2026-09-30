@@ -147,6 +147,13 @@ fn apply_support_configuration() {
     );
     drop(overrides);
 
+    // Enable Direct IP access by default. Keep it in defaults rather than
+    // overrides so it remains user-configurable from Security settings.
+    let mut defaults = config::DEFAULT_SETTINGS.write().unwrap();
+    defaults.insert("direct-server".to_owned(), "Y".to_owned());
+    defaults.insert("direct-access-port".to_owned(), "21118".to_owned());
+    drop(defaults);
+
     // Hide server/network configuration from the UI while leaving Security
     // settings available for local or remote administration.
     let mut builtins = config::BUILTIN_SETTINGS.write().unwrap();
