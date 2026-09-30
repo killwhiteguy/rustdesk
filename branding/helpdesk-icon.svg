@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2497FF"/>
+      <stop offset="0.48" stop-color="#1262FF"/>
+      <stop offset="1" stop-color="#0738D6"/>
+    </linearGradient>
+    <linearGradient id="cursor" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F2F5FA"/>
+    </linearGradient>
+    <filter id="softShadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="10"/>
+      <feOffset dx="0" dy="14" result="off"/>
+      <feColorMatrix in="off" type="matrix" values="0 0 0 0 0.02  0 0 0 0 0.12  0 0 0 0 0.35  0 0 0 .22 0"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g filter="url(#softShadow)">
+    <path fill="url(#bg)" d="M170 120h610c82 0 148 66 148 148v402c0 82-66 148-148 148H402l-158 112c-24 17-56-3-49-31l19-81h-44c-82 0-148-66-148-148V268c0-82 66-148 148-148z"/>
+    <path d="M258 457L421 617 726 314" fill="none" stroke="#FFFFFF" stroke-width="86" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M610 572L888 800c19 15 10 45-14 48l-102 14 75 120c10 16 5 37-11 47l-50 31c-16 10-37 5-47-11l-72-117-64 82c-15 19-46 10-49-14l-30-393c-2-24 27-40 46-25z" fill="url(#cursor)" stroke="#0733A8" stroke-width="32" stroke-linejoin="round"/>
+  </g>
+</svg>

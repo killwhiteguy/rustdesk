@@ -1,0 +1,167 @@
+name: HelpDesk Windows x64 Portable
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - support-client
+
+env:
+  SCITER_RUST_VERSION: "1.75"
+  LLVM_VERSION: "15.0.6"
+  FLUTTER_VERSION: "3.24.5"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+
+jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
+  build-topmost-window:
+    uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
+    with:
+      upload-artifact: true
+      target: windows-2022
+      configuration: Release
+      platform: x64
+      target_version: Windows10
+
+  build-helpdesk-windows-x64:
+    needs:
+      - generate-bridge
+      - build-topmost-window
+    runs-on: windows-2022
+
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: recursive
+
+      - name: Restore Flutter-Rust bridge
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          architecture: x64
+
+      - name: Replace Flutter engine with RustDesk engine
+        shell: pwsh
+        run: |
+          flutter doctor -v
+          flutter precache --windows
+          Invoke-WebRequest -Uri https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile windows-x64-release.zip
+          Expand-Archive -Path windows-x64-release.zip -DestinationPath windows-x64-release
+          Move-Item -Force windows-x64-release/* "C:/hostedtoolcache/windows/flutter/stable-${{ env.FLUTTER_VERSION }}-x64/bin/cache/artifacts/engine/windows-x64-release/"
+
+      - name: Patch Flutter
+        shell: bash
+        run: |
+          cp .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff $(dirname $(dirname $(which flutter)))
+          cd $(dirname $(dirname $(which flutter)))
+          git apply flutter_3.24.4_dropdown_menu_enableFilter.diff
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+        with:
+          toolchain: ${{ env.SCITER_RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+          components: rustfmt
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+        with:
+          prefix-key: helpdesk-windows-x64
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: C:\\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        shell: bash
+        env:
+          VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+        run: |
+          if ! "$VCPKG_ROOT/vcpkg" install --triplet x64-windows-static --x-install-root="$VCPKG_ROOT/installed"; then
+            find "$VCPKG_ROOT/" -name "*.log" | while read -r log; do
+              echo "$log:"
+              echo "======"
+              cat "$log"
+              echo "======"
+            done
+            exit 1
+          fi
+
+      - name: Generate HelpDesk branding
+        shell: pwsh
+        run: |
+          if (-not (Get-Command magick -ErrorAction SilentlyContinue)) {
+            choco install imagemagick -y --no-progress
+            $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH","User")
+          }
+
+          New-Item -ItemType Directory -Force -Path ".\flutter\assets" | Out-Null
+          New-Item -ItemType Directory -Force -Path ".\flutter\windows\runner\resources" | Out-Null
+
+          magick -background none ".\branding\helpdesk-icon.svg" -resize 1024x1024 ".\res\icon.png"
+          magick -background none ".\branding\helpdesk-icon.svg" -define icon:auto-resize=256,128,64,48,40,32,24,20,16 ".\res\icon.ico"
+          Copy-Item ".\res\icon.ico" ".\res\tray-icon.ico" -Force
+          Copy-Item ".\res\icon.ico" ".\flutter\windows\runner\resources\app_icon.ico" -Force
+          Copy-Item ".\res\icon.png" ".\flutter\assets\icon.png" -Force
+
+          magick -background none ".\branding\helpdesk-logo.svg" -resize "1200x350>" ".\flutter\assets\logo.png"
+          Copy-Item ".\flutter\assets\logo.png" ".\flutter\assets\logo_light.png" -Force
+          Copy-Item ".\flutter\assets\logo.png" ".\flutter\assets\logo_dark.png" -Force
+
+      - name: Build HelpDesk
+        shell: pwsh
+        run: |
+          python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
+          $release = ".\flutter\build\windows\x64\runner\Release"
+          Rename-Item "$release\rustdesk.exe" "HelpDesk.exe"
+          Move-Item $release ".\helpdesk"
+
+      - name: Add top-most helper
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: topmostwindow-artifacts-x64
+          path: ./helpdesk
+
+      - name: Build portable HelpDesk.exe
+        shell: pwsh
+        run: |
+          Push-Location .\libs\portable
+          pip3 install -r requirements.txt
+          python3 .\generate.py -f ..\..\helpdesk -o . -e ..\..\helpdesk\HelpDesk.exe
+          Pop-Location
+
+          Move-Item .\target\release\rustdesk-portable-packer.exe .\HelpDesk.exe
+          Get-FileHash .\HelpDesk.exe -Algorithm SHA256 | Format-List
+
+      - name: Upload HelpDesk portable
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: HelpDesk-Windows-x64-Portable
+          path: ./HelpDesk.exe
+          if-no-files-found: error

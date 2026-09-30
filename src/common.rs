@@ -120,7 +120,44 @@ impl Drop for SimpleCallOnReturn {
     }
 }
 
+const SUPPORT_APP_NAME: &str = "HelpDesk";
+const SUPPORT_ID_SERVER: &str = "sup.oame.net:21116";
+const SUPPORT_RELAY_SERVER: &str = "sup.oame.net:21117";
+const SUPPORT_PUBLIC_KEY: &str = "wR3YnAZTF1OOSf9CrCuuLJzFfUKHvX1jbzv4PUj6yf0=";
+
+fn apply_support_configuration() {
+    *config::APP_NAME.write().unwrap() = SUPPORT_APP_NAME.to_owned();
+
+    // Keep the self-hosted server configuration fixed even if a local config
+    // file contains different values.
+    let mut overrides = config::OVERWRITE_SETTINGS.write().unwrap();
+    overrides.insert(
+        "custom-rendezvous-server".to_owned(),
+        SUPPORT_ID_SERVER.to_owned(),
+    );
+    overrides.insert("relay-server".to_owned(), SUPPORT_RELAY_SERVER.to_owned());
+    overrides.insert("key".to_owned(), SUPPORT_PUBLIC_KEY.to_owned());
+    overrides.insert("api-server".to_owned(), String::new());
+
+    // Support technicians must be able to edit Security settings during an
+    // active remote session (for example, to set a permanent password).
+    overrides.insert(
+        "allow-remote-config-modification".to_owned(),
+        "Y".to_owned(),
+    );
+    drop(overrides);
+
+    // Hide server/network configuration from the UI while leaving Security
+    // settings available for local or remote administration.
+    let mut builtins = config::BUILTIN_SETTINGS.write().unwrap();
+    builtins.insert("hide-network-settings".to_owned(), "Y".to_owned());
+    builtins.insert("hide-server-settings".to_owned(), "Y".to_owned());
+    builtins.insert("hide-powered-by-me".to_owned(), "Y".to_owned());
+}
+
 pub fn global_init() -> bool {
+    apply_support_configuration();
+
     #[cfg(all(target_os = "linux", feature = "drm"))]
     crate::platform::linux::dispatch_wayland_display_probe();
     #[cfg(target_os = "linux")]
