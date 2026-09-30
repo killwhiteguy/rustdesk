@@ -1,0 +1,182 @@
+name: HelpDesk Linux x64
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - support-client
+
+env:
+  RUST_VERSION: "1.75"
+  FLUTTER_VERSION: "3.24.5"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+
+jobs:
+  generate-bridge:
+    uses: ./.github/workflows/bridge.yml
+
+  build-helpdesk-linux-x64:
+    needs:
+      - generate-bridge
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Checkout source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: recursive
+
+      - name: Restore Flutter-Rust bridge
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: bridge-artifact
+          path: ./
+
+      - name: Install runner dependencies
+        run: |
+          sudo rm -rf /opt/ghc /usr/local/lib/android /usr/share/dotnet || true
+          sudo apt-get update -y
+          sudo apt-get install -y nasm libva-dev qemu-user-static
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
+        with:
+          vcpkgDirectory: /opt/artifacts/vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install vcpkg dependencies
+        run: |
+          if ! "$VCPKG_ROOT/vcpkg" install --triplet x64-linux --x-install-root="$VCPKG_ROOT/installed"; then
+            find "$VCPKG_ROOT/" -name "*.log" | while read -r log; do
+              echo "$log:"
+              echo "======"
+              cat "$log"
+              echo "======"
+            done
+            exit 1
+          fi
+
+      - uses: rustdesk-org/run-on-arch-action@d3fcfbb632b84cf7f6bc772bfaaa2c2f4f8789a8
+        name: Build HelpDesk Linux x64
+        with:
+          arch: x86_64
+          distro: ubuntu18.04
+          githubToken: ${{ github.token }}
+          dockerRunArgs: |
+            --volume "${PWD}:/workspace"
+            --volume "/opt/artifacts:/opt/artifacts"
+          shell: /bin/bash
+          install: |
+            apt-get update -y
+            apt-get install -y \
+              build-essential \
+              clang \
+              cmake \
+              curl \
+              gcc \
+              git \
+              g++ \
+              libayatana-appindicator3-dev \
+              libasound2-dev \
+              libclang-10-dev \
+              libgstreamer1.0-dev \
+              libgstreamer-plugins-base1.0-dev \
+              libgtk-3-dev \
+              libpulse-dev \
+              libva-dev \
+              libxcb-randr0-dev \
+              libxcb-shape0-dev \
+              libxcb-xfixes0-dev \
+              libxdo-dev \
+              libxfixes-dev \
+              llvm-10-dev \
+              nasm \
+              ninja-build \
+              pkg-config \
+              python3 \
+              rpm \
+              unzip \
+              wget \
+              xz-utils \
+              libssl-dev \
+              librsvg2-bin \
+              fonts-liberation
+            apt-get remove -y libopus-dev || true
+          run: |
+            set -e
+            git config --global --add safe.directory "*"
+
+            pushd /opt
+            wget -q -O rust.tar.gz https://static.rust-lang.org/dist/rust-${{ env.RUST_VERSION }}-x86_64-unknown-linux-gnu.tar.gz
+            tar -zxf rust.tar.gz
+            rm rust.tar.gz
+            cd rust-${{ env.RUST_VERSION }}-x86_64-unknown-linux-gnu
+            ./install.sh
+            cd /opt
+            rm -rf rust-${{ env.RUST_VERSION }}-x86_64-unknown-linux-gnu
+
+            mkdir -p ~/.cargo
+            cat > ~/.cargo/config <<'EOF'
+            [source.crates-io]
+            registry = 'https://github.com/rust-lang/crates.io-index'
+            EOF
+
+            cd /workspace
+            export VCPKG_ROOT=/opt/artifacts/vcpkg
+            cargo build --locked --lib --features hwcodec,flutter,unix-file-copy-paste --release
+            rm -rf target/release/deps target/release/build
+
+            cd /opt
+            wget -q https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
+            tar xf flutter_linux_${{ env.FLUTTER_VERSION }}-stable.tar.xz
+            export PATH=/opt/flutter/bin:$PATH
+            flutter doctor -v
+
+            if [[ "${{ env.FLUTTER_VERSION }}" == "3.24.5" ]]; then
+              cd /opt/flutter
+              git apply /workspace/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+            fi
+
+            cd /workspace
+            mkdir -p flutter/assets
+            rsvg-convert -w 1024 -h 1024 branding/helpdesk-icon.svg > res/icon.png
+            cp res/icon.png flutter/assets/icon.png
+            rsvg-convert -w 1200 -h 400 -a branding/helpdesk-logo.svg > flutter/assets/logo.png
+            cp flutter/assets/logo.png flutter/assets/logo_light.png
+            cp flutter/assets/logo.png flutter/assets/logo_dark.png
+
+            export CARGO_INCREMENTAL=0
+            export DEB_ARCH=amd64
+            python3 ./build.py --flutter --skip-cargo
+
+            bundle="flutter/build/linux/x64/release/bundle"
+            if [ -f "$bundle/rustdesk" ]; then
+              mv "$bundle/rustdesk" "$bundle/HelpDesk"
+            fi
+            tar -C "$bundle" -czf HelpDesk-Linux-x64.tar.gz .
+
+            deb_file=$(ls rustdesk-*.deb | head -n 1)
+            cp "$deb_file" HelpDesk-Linux-x64.deb
+
+      - name: Upload HelpDesk Linux bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: HelpDesk-Linux-x64-Bundle
+          path: HelpDesk-Linux-x64.tar.gz
+          if-no-files-found: error
+
+      - name: Upload HelpDesk Linux deb
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: HelpDesk-Linux-x64-DEB
+          path: HelpDesk-Linux-x64.deb
+          if-no-files-found: error
