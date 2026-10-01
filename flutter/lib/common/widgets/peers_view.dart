@@ -441,6 +441,8 @@ abstract class BasePeersView extends StatelessWidget {
       case PeerTabIndex.group:
         peers = gFFI.groupModel.peersModel;
         break;
+      case PeerTabIndex.localAddressBook:
+        throw StateError('Local address book does not use BasePeersView');
     }
     return _PeersView(
         peers: peers,

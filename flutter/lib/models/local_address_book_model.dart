@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_hbb/main.dart';
 import '../common.dart';
 
 const _localAddressBookKey = 'oameit-local-address-book';
