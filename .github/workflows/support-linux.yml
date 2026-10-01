@@ -1,4 +1,4 @@
-name: HelpDesk Linux x64
+name: OAME IT Remote Support Linux x64
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ jobs:
   generate-bridge:
     uses: ./.github/workflows/bridge.yml
 
-  build-helpdesk-linux-x64:
+  build-oameit-remote-support-linux-x64:
     needs:
       - generate-bridge
     runs-on: ubuntu-22.04
@@ -66,7 +66,7 @@ jobs:
           fi
 
       - uses: rustdesk-org/run-on-arch-action@d3fcfbb632b84cf7f6bc772bfaaa2c2f4f8789a8
-        name: Build HelpDesk Linux x64
+        name: Build OAME IT Remote Support Linux x64
         with:
           arch: x86_64
           distro: ubuntu18.04
@@ -159,23 +159,23 @@ jobs:
 
             bundle="flutter/build/linux/x64/release/bundle"
             if [ -f "$bundle/rustdesk" ]; then
-              mv "$bundle/rustdesk" "$bundle/HelpDesk"
+              mv "$bundle/rustdesk" "$bundle/OAMEITRemoteSupport"
             fi
-            tar -C "$bundle" -czf HelpDesk-Linux-x64.tar.gz .
+            tar -C "$bundle" -czf OAME-IT-Remote-Support-Linux-x64.tar.gz .
 
             deb_file=$(ls rustdesk-*.deb | head -n 1)
-            cp "$deb_file" HelpDesk-Linux-x64.deb
+            cp "$deb_file" OAME-IT-Remote-Support-Linux-x64.deb
 
-      - name: Upload HelpDesk Linux bundle
+      - name: Upload OAME IT Remote Support Linux bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: HelpDesk-Linux-x64-Bundle
-          path: HelpDesk-Linux-x64.tar.gz
+          name: OAME-IT-Remote-Support-Linux-x64-Bundle
+          path: OAME-IT-Remote-Support-Linux-x64.tar.gz
           if-no-files-found: error
 
-      - name: Upload HelpDesk Linux deb
+      - name: Upload OAME IT Remote Support Linux deb
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: HelpDesk-Linux-x64-DEB
-          path: HelpDesk-Linux-x64.deb
+          name: OAME-IT-Remote-Support-Linux-x64-DEB
+          path: OAME-IT-Remote-Support-Linux-x64.deb
           if-no-files-found: error

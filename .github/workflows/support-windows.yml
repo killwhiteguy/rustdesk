@@ -1,4 +1,4 @@
-name: HelpDesk Windows x64 Portable
+name: OAME IT Remote Support Windows x64 Portable
 
 on:
   workflow_dispatch:
@@ -26,7 +26,7 @@ jobs:
       platform: x64
       target_version: Windows10
 
-  build-helpdesk-windows-x64:
+  build-oameit-remote-support-windows-x64:
     needs:
       - generate-bridge
       - build-topmost-window
@@ -89,7 +89,7 @@ jobs:
       - name: Cache Rust
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
         with:
-          prefix-key: helpdesk-windows-x64
+          prefix-key: oameit-remote-support-windows-x64
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2
@@ -113,7 +113,7 @@ jobs:
             exit 1
           fi
 
-      - name: Generate HelpDesk branding
+      - name: Generate OAME IT Remote Support branding
         shell: pwsh
         run: |
           if (-not (Get-Command magick -ErrorAction SilentlyContinue)) {
@@ -134,34 +134,34 @@ jobs:
           Copy-Item ".\flutter\assets\logo.png" ".\flutter\assets\logo_light.png" -Force
           Copy-Item ".\flutter\assets\logo.png" ".\flutter\assets\logo_dark.png" -Force
 
-      - name: Build HelpDesk
+      - name: Build OAME IT Remote Support
         shell: pwsh
         run: |
           python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec --vram
           $release = ".\flutter\build\windows\x64\runner\Release"
-          Rename-Item "$release\rustdesk.exe" "HelpDesk.exe"
-          Move-Item $release ".\helpdesk"
+          Rename-Item "$release\rustdesk.exe" "OAMEITRemoteSupport.exe"
+          Move-Item $release ".\oameit-remote-support"
 
       - name: Add top-most helper
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: topmostwindow-artifacts-x64
-          path: ./helpdesk
+          path: ./oameit-remote-support
 
-      - name: Build portable HelpDesk.exe
+      - name: Build portable OAMEITRemoteSupport.exe
         shell: pwsh
         run: |
           Push-Location .\libs\portable
           pip3 install -r requirements.txt
-          python3 .\generate.py -f ..\..\helpdesk -o . -e ..\..\helpdesk\HelpDesk.exe
+          python3 .\generate.py -f ..\..\oameit-remote-support -o . -e ..\..\oameit-remote-support\OAMEITRemoteSupport.exe
           Pop-Location
 
-          Move-Item .\target\release\rustdesk-portable-packer.exe .\HelpDesk.exe
-          Get-FileHash .\HelpDesk.exe -Algorithm SHA256 | Format-List
+          Move-Item .\target\release\rustdesk-portable-packer.exe ".\OAME-IT-Remote-Support.exe"
+          Get-FileHash .\OAMEITRemoteSupport.exe -Algorithm SHA256 | Format-List
 
-      - name: Upload HelpDesk portable
+      - name: Upload OAME IT Remote Support portable
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: HelpDesk-Windows-x64-Portable
-          path: ./HelpDesk.exe
+          name: OAME-IT-Remote-Support-Windows-x64-Portable
+          path: ./OAME-IT-Remote-Support.exe
           if-no-files-found: error

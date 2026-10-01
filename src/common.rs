@@ -120,7 +120,7 @@ impl Drop for SimpleCallOnReturn {
     }
 }
 
-const SUPPORT_APP_NAME: &str = "HelpDesk";
+const SUPPORT_APP_NAME: &str = "OAMEITRemoteSupport";
 const SUPPORT_ID_SERVER: &str = "sup.oame.net:21116";
 const SUPPORT_RELAY_SERVER: &str = "sup.oame.net:21117";
 const SUPPORT_PUBLIC_KEY: &str = "wR3YnAZTF1OOSf9CrCuuLJzFfUKHvX1jbzv4PUj6yf0=";
