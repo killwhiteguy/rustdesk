@@ -157,7 +157,7 @@ jobs:
           Pop-Location
 
           Move-Item .\target\release\rustdesk-portable-packer.exe ".\OAME-IT-Remote-Support.exe"
-          Get-FileHash .\OAMEITRemoteSupport.exe -Algorithm SHA256 | Format-List
+          Get-FileHash ".\OAME-IT-Remote-Support.exe" -Algorithm SHA256 | Format-List
 
       - name: Upload OAME IT Remote Support portable
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
