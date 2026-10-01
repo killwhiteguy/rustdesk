@@ -7,7 +7,7 @@ on:
       - support-client
 
 env:
-  RUST_VERSION: "1.75"
+  RUST_VERSION: "1.75.0"
   FLUTTER_VERSION: "3.24.5"
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
