@@ -19,7 +19,7 @@ const STORAGE_VERSION: u32 = 2;
 const STORAGE_FILE: &str = "oame_agent_identity.json";
 const SELF_CHECK_MESSAGE: &[u8] = b"oame-agent-identity-v1";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct StoredAgentIdentity {
     version: u32,
     installation_id: String,
@@ -28,7 +28,6 @@ struct StoredAgentIdentity {
     created_at: u64,
 }
 
-#[derive(Debug, Clone)]
 pub struct AgentIdentity {
     installation_id: String,
     public_key: Vec<u8>,
