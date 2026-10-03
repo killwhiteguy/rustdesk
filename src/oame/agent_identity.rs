@@ -1,6 +1,5 @@
 use hbb_common::{
     config::Config,
-    password_security::symmetric_crypt,
     sodiumoxide::{
         base64::{decode, encode, Variant},
         crypto::sign,
@@ -8,9 +7,15 @@ use hbb_common::{
     uuid::Uuid,
 };
 use serde_derive::{Deserialize, Serialize};
-use std::{fs, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    fs,
+    path::PathBuf,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
-const STORAGE_VERSION: u32 = 1;
+use super::win_dpapi::{protect_machine, unprotect_machine};
+
+const STORAGE_VERSION: u32 = 2;
 const STORAGE_FILE: &str = "oame_agent_identity.json";
 const SELF_CHECK_MESSAGE: &[u8] = b"oame-agent-identity-v1";
 
@@ -19,7 +24,7 @@ struct StoredAgentIdentity {
     version: u32,
     installation_id: String,
     public_key: String,
-    encrypted_private_key: String,
+    protected_private_key: String,
     created_at: u64,
 }
 
@@ -66,10 +71,9 @@ impl AgentIdentity {
 
         let public_key = decode(stored.public_key.as_bytes(), Variant::Original)
             .map_err(|_| "invalid OAME installation public key encoding".to_owned())?;
-        let encrypted_private_key = decode(stored.encrypted_private_key.as_bytes(), Variant::Original)
-            .map_err(|_| "invalid OAME encrypted private key encoding".to_owned())?;
-        let private_key = symmetric_crypt(&encrypted_private_key, false)
-            .map_err(|_| "failed to decrypt OAME installation private key".to_owned())?;
+        let protected_private_key = decode(stored.protected_private_key.as_bytes(), Variant::Original)
+            .map_err(|_| "invalid OAME protected private key encoding".to_owned())?;
+        let private_key = unprotect_machine(&protected_private_key)?;
 
         let identity = Self {
             installation_id: stored.installation_id,
@@ -133,13 +137,12 @@ impl AgentIdentity {
 
     fn store(&self) -> Result<(), String> {
         self.validate()?;
-        let encrypted_private_key = symmetric_crypt(&self.private_key, true)
-            .map_err(|_| "failed to protect OAME installation private key".to_owned())?;
+        let protected_private_key = protect_machine(&self.private_key)?;
         let stored = StoredAgentIdentity {
             version: STORAGE_VERSION,
             installation_id: self.installation_id.clone(),
             public_key: encode(&self.public_key, Variant::Original),
-            encrypted_private_key: encode(&encrypted_private_key, Variant::Original),
+            protected_private_key: encode(&protected_private_key, Variant::Original),
             created_at: self.created_at,
         };
         let raw = serde_json::to_vec_pretty(&stored)
@@ -199,5 +202,14 @@ mod tests {
         let second = AgentIdentity::generate().expect("second identity");
         assert_ne!(first.installation_id(), second.installation_id());
         assert_ne!(first.public_key(), second.public_key());
+    }
+
+    #[test]
+    fn private_key_round_trips_through_dpapi() {
+        let identity = AgentIdentity::generate().expect("identity generation");
+        let protected = protect_machine(&identity.private_key).expect("DPAPI protect");
+        assert_ne!(protected, identity.private_key);
+        let restored = unprotect_machine(&protected).expect("DPAPI unprotect");
+        assert_eq!(restored, identity.private_key);
     }
 }
