@@ -1,13 +1,15 @@
-use reqwest::Client;
+use reqwest::{header::AUTHORIZATION, Client, Method, RequestBuilder};
 use url::Url;
 
-use super::endpoints::agent_api_base_url;
+use super::{
+    agent_identity::AgentIdentity,
+    endpoints::{agent_api_base_url, agent_api_url, ENROLL_PATH},
+    wire::{
+        sign_request, HEADER_INSTALLATION_ID, HEADER_NONCE, HEADER_PROTOCOL_VERSION,
+        HEADER_SIGNATURE, HEADER_TIMESTAMP,
+    },
+};
 
-/// Machine-facing OAME API client.
-///
-/// This client is intentionally separate from RustDesk native transport and
-/// from the human/Portal API. Endpoint paths and signed request serialization
-/// are added only when the corresponding Agent API contract is implemented.
 #[derive(Clone, Debug)]
 pub struct AgentApiClient {
     base_url: Url,
@@ -15,8 +17,6 @@ pub struct AgentApiClient {
 }
 
 impl AgentApiClient {
-    /// Builds a client pinned to the canonical OAME Agent API origin.
-    /// Enrollment input is never allowed to replace this origin.
     pub fn new() -> Result<Self, String> {
         Ok(Self {
             base_url: agent_api_base_url()?,
@@ -28,37 +28,47 @@ impl AgentApiClient {
         &self.base_url
     }
 
-    /// Resolve a machine API path below the fixed `/v1/` root.
-    ///
-    /// Absolute URLs, scheme-relative URLs and parent traversal are rejected,
-    /// so enrollment/bootstrap data cannot redirect the managed client to an
-    /// arbitrary backend.
-    pub fn endpoint(&self, relative_path: &str) -> Result<Url, String> {
-        let path = relative_path.trim();
-        if path.is_empty() {
-            return Err("OAME Agent API endpoint path must not be empty".to_owned());
-        }
-        if path.starts_with('/')
-            || path.starts_with("//")
-            || path.contains("://")
-            || path.split('/').any(|part| part == "..")
-        {
-            return Err("OAME Agent API endpoint must be a relative /v1/ path".to_owned());
-        }
+    pub fn signed_request(
+        &self,
+        identity: &AgentIdentity,
+        method: Method,
+        path: &str,
+        body: Vec<u8>,
+    ) -> Result<RequestBuilder, String> {
+        let url = agent_api_url(path)?;
+        let signed = sign_request(identity, &method, path, &body)?;
 
-        self.base_url
-            .join(path)
-            .map_err(|e| format!("invalid OAME Agent API endpoint path: {e}"))
+        Ok(self
+            .http
+            .request(method, url)
+            .header(HEADER_INSTALLATION_ID, signed.installation_id)
+            .header(HEADER_TIMESTAMP, signed.timestamp)
+            .header(HEADER_NONCE, signed.nonce)
+            .header(HEADER_SIGNATURE, signed.signature)
+            .header(HEADER_PROTOCOL_VERSION, signed.protocol_version)
+            .body(body))
     }
 
-    pub(crate) fn http(&self) -> &Client {
-        &self.http
+    pub fn enrollment_request(
+        &self,
+        identity: &AgentIdentity,
+        enrollment_token: &str,
+        body: Vec<u8>,
+    ) -> Result<RequestBuilder, String> {
+        if enrollment_token.is_empty() {
+            return Err("OAME enrollment token must not be empty".to_owned());
+        }
+
+        Ok(self
+            .signed_request(identity, Method::POST, ENROLL_PATH, body)?
+            .header(AUTHORIZATION, format!("Bearer {enrollment_token}")))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::oame::endpoints::{CONFIG_PATH, HEARTBEAT_PATH, IDENTITY_PATH};
 
     #[test]
     fn client_is_pinned_to_machine_api_origin() {
@@ -66,23 +76,14 @@ mod tests {
         assert_eq!(client.base_url().scheme(), "https");
         assert_eq!(client.base_url().host_str(), Some("agent.oame.net"));
         assert_eq!(client.base_url().path(), "/v1/");
-
-        // `operation` is deliberately a placeholder: concrete Agent API
-        // endpoint paths are not defined by this client-side topology layer.
-        let endpoint = client.endpoint("operation").expect("relative endpoint");
-        assert_eq!(endpoint.as_str(), "https://agent.oame.net/v1/operation");
     }
 
     #[test]
-    fn arbitrary_backend_override_is_rejected() {
-        let client = AgentApiClient::new().expect("Agent API client");
-        for invalid in [
-            "https://evil.example/v1/operation",
-            "//evil.example/v1/operation",
-            "/v1/operation",
-            "../api/remote/operation",
-        ] {
-            assert!(client.endpoint(invalid).is_err(), "accepted: {invalid}");
+    fn only_approved_agent_v1_paths_resolve() {
+        for path in [ENROLL_PATH, HEARTBEAT_PATH, CONFIG_PATH, IDENTITY_PATH] {
+            let url = agent_api_url(path).expect("approved endpoint");
+            assert_eq!(url.host_str(), Some("agent.oame.net"));
         }
+        assert!(agent_api_url("/v1/other").is_err());
     }
 }
