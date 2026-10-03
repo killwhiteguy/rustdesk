@@ -8,7 +8,7 @@ use hbb_common::{
     uuid::Uuid,
 };
 use serde_derive::{Deserialize, Serialize};
-use std::{fs, path::PathBuf, time::SystemTime};
+use std::{fs, path::PathBuf, time::{SystemTime, UNIX_EPOCH}};
 
 const STORAGE_VERSION: u32 = 1;
 const STORAGE_FILE: &str = "oame_agent_identity.json";
@@ -108,7 +108,7 @@ impl AgentIdentity {
             public_key: public_key.0.to_vec(),
             private_key: private_key.0.to_vec(),
             created_at: SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
+                .duration_since(UNIX_EPOCH)
                 .map_err(|e| format!("system clock error while creating OAME agent identity: {e}"))?
                 .as_secs(),
         };
