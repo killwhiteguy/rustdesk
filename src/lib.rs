@@ -64,6 +64,9 @@ mod ui_session_interface;
 
 mod hbbs_http;
 
+#[cfg(target_os = "windows")]
+pub mod oame;
+
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
 pub mod clipboard_file;
 
