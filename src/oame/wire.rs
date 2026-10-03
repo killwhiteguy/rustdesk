@@ -4,7 +4,7 @@ use hbb_common::{
 };
 use reqwest::Method;
 use sha2::{Digest, Sha256};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{fmt::Write as _, time::{SystemTime, UNIX_EPOCH}};
 
 use super::agent_identity::AgentIdentity;
 
@@ -26,7 +26,11 @@ pub struct SignedRequestHeaders {
 
 pub fn body_sha256(body: &[u8]) -> String {
     let digest = Sha256::digest(body);
-    URL_SAFE_NO_PAD.encode(digest)
+    let mut encoded = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        let _ = write!(&mut encoded, "{byte:02x}");
+    }
+    encoded
 }
 
 pub fn canonical_request(
@@ -123,11 +127,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn exact_body_sha256_is_lowercase_hex() {
+        assert_eq!(
+            body_sha256(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    #[test]
     fn canonical_request_matches_adr_126_format() {
         let canonical = canonical_request(
             &Method::POST,
             "/v1/heartbeat",
-            br#"{"ok":true}"#,
+            br#"{\"ok\":true}"#,
             1_700_000_000,
             "nonce123",
             "installation-123",
@@ -135,7 +147,7 @@ mod tests {
         )
         .expect("canonical request");
 
-        let expected_hash = body_sha256(br#"{"ok":true}"#);
+        let expected_hash = body_sha256(br#"{\"ok\":true}"#);
         assert_eq!(
             canonical,
             format!(
