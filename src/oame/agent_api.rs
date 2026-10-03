@@ -67,18 +67,20 @@ mod tests {
         assert_eq!(client.base_url().host_str(), Some("agent.oame.net"));
         assert_eq!(client.base_url().path(), "/v1/");
 
-        let endpoint = client.endpoint("heartbeat").expect("relative endpoint");
-        assert_eq!(endpoint.as_str(), "https://agent.oame.net/v1/heartbeat");
+        // `operation` is deliberately a placeholder: concrete Agent API
+        // endpoint paths are not defined by this client-side topology layer.
+        let endpoint = client.endpoint("operation").expect("relative endpoint");
+        assert_eq!(endpoint.as_str(), "https://agent.oame.net/v1/operation");
     }
 
     #[test]
     fn arbitrary_backend_override_is_rejected() {
         let client = AgentApiClient::new().expect("Agent API client");
         for invalid in [
-            "https://evil.example/v1/enroll",
-            "//evil.example/v1/enroll",
-            "/v1/enroll",
-            "../api/remote/enroll",
+            "https://evil.example/v1/operation",
+            "//evil.example/v1/operation",
+            "/v1/operation",
+            "../api/remote/operation",
         ] {
             assert!(client.endpoint(invalid).is_err(), "accepted: {invalid}");
         }
