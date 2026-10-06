@@ -1,9 +1,13 @@
-use reqwest::{header::AUTHORIZATION, Client, Method, RequestBuilder};
+use reqwest::{
+    header::{AUTHORIZATION, CONTENT_TYPE},
+    Client, Method, RequestBuilder,
+};
 use url::Url;
 
 use super::{
     agent_identity::AgentIdentity,
     endpoints::{agent_api_base_url, agent_api_url, ENROLL_PATH},
+    enrollment::EnrollmentRequest,
     wire::{
         sign_request, HEADER_INSTALLATION_ID, HEADER_NONCE, HEADER_PROTOCOL_VERSION,
         HEADER_SIGNATURE, HEADER_TIMESTAMP,
@@ -53,15 +57,20 @@ impl AgentApiClient {
         &self,
         identity: &AgentIdentity,
         enrollment_token: &str,
-        body: Vec<u8>,
+        enrollment: &EnrollmentRequest,
     ) -> Result<RequestBuilder, String> {
         if enrollment_token.is_empty() {
             return Err("OAME enrollment token must not be empty".to_owned());
         }
+        if enrollment.installation_id != identity.installation_id() {
+            return Err("OAME enrollment installation_id does not match signing identity".to_owned());
+        }
 
+        let body = enrollment.to_json_bytes()?;
         Ok(self
             .signed_request(identity, Method::POST, ENROLL_PATH, body)?
-            .header(AUTHORIZATION, format!("Bearer {enrollment_token}")))
+            .header(AUTHORIZATION, format!("Bearer {enrollment_token}"))
+            .header(CONTENT_TYPE, "application/json"))
     }
 }
 
